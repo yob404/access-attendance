@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>企业门禁考勤管理系统</h2>
+<p class="muted">网络规划 + 门禁权限 + 考勤统计 一体化运维项目</p>
+<table>
+  <thead><tr><th>模块</th><th>计划</th><th>状态</th></tr></thead>
+  <tbody>
+    {% for name, week, status in modules %}
+    <tr><td>{{ name }}</td><td>{{ week }}</td><td>{{ status }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

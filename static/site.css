@@ -1,0 +1,15 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #1f2937; }
+.container { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+nav { display: flex; gap: 8px; margin-bottom: 20px; }
+nav a { padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f766e; text-decoration: none; font-size: 14px; }
+nav a:hover { background: #ecfdf5; }
+h2, h3 { margin: 0 0 8px; }
+.muted { color: #64748b; font-size: 14px; margin: 0 0 16px; }
+table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; }
+th, td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; text-align: left; font-size: 14px; }
+th { background: #f8fafc; }
+form.inline { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+input { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+button { padding: 8px 14px; border: 1px solid #0f766e; background: #0f766e; color: #fff; border-radius: 6px; font-size: 14px; cursor: pointer; }
+button.danger { padding: 5px 10px; font-size: 13px; background: #b91c1c; border-color: #b91c1c; }

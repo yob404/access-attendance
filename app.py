@@ -11,6 +11,12 @@ init_db()
 DOORS = {"D01": "一号门（大厅）", "D02": "二号门（机房）"}
 WORK_START = "09:00"
 
+RESULT_OK = "通过"
+RESULT_UNKNOWN = "未知卡"
+RESULT_LEFT = "离职卡"
+RESULT_NO_PERM = "无权限"
+RESULT_OUT_TIME = "越权时段"
+
 
 @app.route("/")
 def index():
@@ -18,7 +24,7 @@ def index():
         ("员工 / 部门管理", "第 1 周", "已完成"),
         ("打卡记录", "第 2 周", "已完成"),
         ("考勤月报", "第 2 周", "已完成"),
-        ("门禁权限", "第 3 周", "待开始"),
+        ("门禁权限", "第 3 周", "进行中"),
         ("设备在线状态", "第 3 周", "待开始"),
         ("网络规划", "第 4 周", "待开始"),
     ]
@@ -74,6 +80,65 @@ def employee_back(emp_id):
     return redirect(url_for("employees"))
 
 
+@app.route("/permissions")
+def permissions():
+    conn = get_conn()
+    perms = conn.execute("""
+        SELECT p.*, e.name, e.card_no
+        FROM door_permission p
+        LEFT JOIN employee e ON e.id = p.employee_id
+        ORDER BY p.id DESC
+    """).fetchall()
+    emps = conn.execute("SELECT * FROM employee WHERE status = '在职' ORDER BY id").fetchall()
+    conn.close()
+    return render_template("permissions.html", perms=perms, employees=emps, doors=DOORS)
+
+
+@app.route("/permissions/add", methods=["POST"])
+def permission_add():
+    employee_id = request.form.get("employee_id")
+    door_id = request.form.get("door_id")
+    start_time = request.form.get("start_time")
+    end_time = request.form.get("end_time")
+    if employee_id and door_id and start_time and end_time:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO door_permission (employee_id, door_id, start_time, end_time) VALUES (?, ?, ?, ?)",
+            (employee_id, door_id, start_time, end_time),
+        )
+        conn.commit()
+        conn.close()
+    return redirect(url_for("permissions"))
+
+
+@app.route("/permissions/<int:perm_id>/toggle", methods=["POST"])
+def permission_toggle(perm_id):
+    conn = get_conn()
+    row = conn.execute("SELECT enabled FROM door_permission WHERE id = ?", (perm_id,)).fetchone()
+    if row:
+        conn.execute(
+            "UPDATE door_permission SET enabled = ? WHERE id = ?",
+            (0 if row["enabled"] == 1 else 1, perm_id),
+        )
+        conn.commit()
+    conn.close()
+    return redirect(url_for("permissions"))
+
+
+def check_permission(conn, employee_id, door_id, now_time):
+    """按门禁点 + 时段判断是否放行。now_time 形如 HH:MM:SS"""
+    rows = conn.execute(
+        "SELECT * FROM door_permission WHERE employee_id = ? AND door_id = ? AND enabled = 1",
+        (employee_id, door_id),
+    ).fetchall()
+    if not rows:
+        return RESULT_NO_PERM
+    for r in rows:
+        if r["start_time"] <= now_time <= r["end_time"]:
+            return RESULT_OK
+    return RESULT_OUT_TIME
+
+
 @app.route("/attendance")
 def attendance():
     conn = get_conn()
@@ -91,7 +156,8 @@ def attendance():
         "SELECT COUNT(*) c FROM attendance_log WHERE punch_time LIKE ?", (cond,)
     ).fetchone()["c"]
     people = conn.execute(
-        "SELECT COUNT(DISTINCT card_no) c FROM attendance_log WHERE punch_time LIKE ?", (cond,)
+        "SELECT COUNT(DISTINCT card_no) c FROM attendance_log WHERE result = '通过' AND punch_time LIKE ?",
+        (cond,),
     ).fetchone()["c"]
     deny = conn.execute(
         "SELECT COUNT(*) c FROM attendance_log WHERE result <> '通过' AND punch_time LIKE ?", (cond,)
@@ -108,15 +174,17 @@ def api_punch():
     card_no = (data.get("card_no") or "").strip()
     door_id = (data.get("door_id") or "D01").strip()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_time = now[11:19]
 
     conn = get_conn()
     emp = conn.execute("SELECT * FROM employee WHERE card_no = ?", (card_no,)).fetchone()
+
     if not emp:
-        result = "未知卡"
+        result = RESULT_UNKNOWN
     elif emp["status"] != "在职":
-        result = "离职卡"
+        result = RESULT_LEFT
     else:
-        result = "通过"
+        result = check_permission(conn, emp["id"], door_id, now_time)
 
     conn.execute(
         "INSERT INTO attendance_log (card_no, door_id, punch_time, result) VALUES (?, ?, ?, ?)",
@@ -126,7 +194,7 @@ def api_punch():
     conn.close()
 
     return {
-        "ok": result == "通过",
+        "ok": result == RESULT_OK,
         "card_no": card_no,
         "name": emp["name"] if emp else None,
         "door": DOORS.get(door_id, door_id),
@@ -162,15 +230,13 @@ def build_month_stats(month):
             if tm > WORK_START:
                 item["late"] += 1
 
-    stats = []
-    for it in agg.values():
-        stats.append({
-            "card_no": it["card_no"],
-            "name": it["name"],
-            "dept": it["dept"],
-            "days": len(it["days"]),
-            "late": it["late"],
-        })
+    stats = [{
+        "card_no": it["card_no"],
+        "name": it["name"],
+        "dept": it["dept"],
+        "days": len(it["days"]),
+        "late": it["late"],
+    } for it in agg.values()]
     stats.sort(key=lambda x: (-x["days"], x["card_no"]))
     return stats
 
@@ -199,7 +265,7 @@ def report_export():
     for s in stats:
         writer.writerow([s["card_no"], s["name"], s["dept"], s["days"], s["late"]])
 
-    data = "\ufeff" + buf.getvalue()  # BOM，保证 WPS/Excel 打开中文不乱码
+    data = "\ufeff" + buf.getvalue()
     return Response(
         data,
         mimetype="text/csv; charset=utf-8",

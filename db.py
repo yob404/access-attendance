@@ -28,6 +28,16 @@ def init_db():
             result     TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS door_permission (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            door_id     TEXT NOT NULL,
+            start_time  TEXT NOT NULL,
+            end_time    TEXT NOT NULL,
+            enabled     INTEGER NOT NULL DEFAULT 1
+        )
+    """)
     conn.commit()
     conn.close()
-    print("[db] 员工表、打卡表已就绪")
+    print("[db] 员工表、打卡表、权限表已就绪")

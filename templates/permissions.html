@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}门禁权限{% endblock %}
+{% block content %}
+<h3>门禁权限</h3>
+
+<form class="inline" method="post" action="/permissions/add">
+  <select name="employee_id" required>
+    {% for e in employees %}
+    <option value="{{ e.id }}">{{ e.name }}（卡{{ e.card_no }}）</option>
+    {% endfor %}
+  </select>
+  <select name="door_id">
+    {% for k, v in doors.items() %}
+    <option value="{{ k }}">{{ v }}</option>
+    {% endfor %}
+  </select>
+  <input type="time" name="start_time" value="08:00" required>
+  <input type="time" name="end_time" value="18:00" required>
+  <button>授权</button>
+</form>
+
+<table>
+  <thead><tr><th>ID</th><th>员工</th><th>卡号</th><th>门禁点</th><th>允许时段</th><th>状态</th><th>操作</th></tr></thead>
+  <tbody>
+    {% for p in perms %}
+    <tr>
+      <td>{{ p.id }}</td>
+      <td>{{ p.name }}</td>
+      <td>{{ p.card_no }}</td>
+      <td>{{ p.door_id }}</td>
+      <td>{{ p.start_time }} - {{ p.end_time }}</td>
+      <td class="{{ 'ok' if p.enabled == 1 else 'bad' }}">{{ '启用' if p.enabled == 1 else '停用' }}</td>
+      <td>
+        <form method="post" action="/permissions/{{ p.id }}/toggle" style="display:inline">
+          <button class="{{ 'danger' if p.enabled == 1 else '' }}">{{ '停用' if p.enabled == 1 else '启用' }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">还没有授权记录</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted">规则：只有「在职」且在该门禁点有启用中的授权、且刷卡时间落在允许时段内，才判定通过。</p>
+{% endblock %}

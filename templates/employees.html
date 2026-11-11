@@ -19,11 +19,17 @@
       <td>{{ e.name }}</td>
       <td>{{ e.dept }}</td>
       <td>{{ e.card_no }}</td>
-      <td>{{ e.status }}</td>
+      <td class="{{ 'ok' if e.status == '在职' else 'bad' }}">{{ e.status }}</td>
       <td>
-        <form method="post" action="/employees/{{ e.id }}/delete" style="display:inline">
-          <button class="danger" onclick="return confirm('确定删除该员工？')">删除</button>
+        {% if e.status == '在职' %}
+        <form method="post" action="/employees/{{ e.id }}/leave" style="display:inline">
+          <button class="danger" onclick="return confirm('标记离职后该卡门禁立即失效，历史记录保留。确认？')">标记离职</button>
         </form>
+        {% else %}
+        <form method="post" action="/employees/{{ e.id }}/back" style="display:inline">
+          <button>恢复在职</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
     {% else %}
@@ -31,4 +37,5 @@
     {% endfor %}
   </tbody>
 </table>
+<p class="muted">说明：删除改为「标记离职」软删除，避免历史打卡记录丢失关联。</p>
 {% endblock %}

@@ -1,20 +1,23 @@
+import csv
 from datetime import datetime
+from io import StringIO
 
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, Response, render_template, request, redirect, url_for
 from db import get_conn, init_db
 
 app = Flask(__name__)
 init_db()
 
 DOORS = {"D01": "一号门（大厅）", "D02": "二号门（机房）"}
+WORK_START = "09:00"
 
 
 @app.route("/")
 def index():
     modules = [
         ("员工 / 部门管理", "第 1 周", "已完成"),
-        ("打卡记录", "第 2 周", "进行中"),
-        ("考勤月报", "第 2 周", "待开始"),
+        ("打卡记录", "第 2 周", "已完成"),
+        ("考勤月报", "第 2 周", "已完成"),
         ("门禁权限", "第 3 周", "待开始"),
         ("设备在线状态", "第 3 周", "待开始"),
         ("网络规划", "第 4 周", "待开始"),
@@ -25,7 +28,9 @@ def index():
 @app.route("/employees")
 def employees():
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM employee ORDER BY id DESC").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM employee ORDER BY CASE status WHEN '在职' THEN 0 ELSE 1 END, id DESC"
+    ).fetchall()
     conn.close()
     return render_template("employees.html", employees=rows)
 
@@ -51,10 +56,19 @@ def employee_add():
     return redirect(url_for("employees"))
 
 
-@app.route("/employees/<int:emp_id>/delete", methods=["POST"])
-def employee_delete(emp_id):
+@app.route("/employees/<int:emp_id>/leave", methods=["POST"])
+def employee_leave(emp_id):
     conn = get_conn()
-    conn.execute("DELETE FROM employee WHERE id = ?", (emp_id,))
+    conn.execute("UPDATE employee SET status = '离职' WHERE id = ?", (emp_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("employees"))
+
+
+@app.route("/employees/<int:emp_id>/back", methods=["POST"])
+def employee_back(emp_id):
+    conn = get_conn()
+    conn.execute("UPDATE employee SET status = '在职' WHERE id = ?", (emp_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("employees"))
@@ -97,7 +111,13 @@ def api_punch():
 
     conn = get_conn()
     emp = conn.execute("SELECT * FROM employee WHERE card_no = ?", (card_no,)).fetchone()
-    result = "通过" if emp else "未知卡"
+    if not emp:
+        result = "未知卡"
+    elif emp["status"] != "在职":
+        result = "离职卡"
+    else:
+        result = "通过"
+
     conn.execute(
         "INSERT INTO attendance_log (card_no, door_id, punch_time, result) VALUES (?, ?, ?, ?)",
         (card_no, door_id, now, result),
@@ -106,13 +126,85 @@ def api_punch():
     conn.close()
 
     return {
-        "ok": bool(emp),
+        "ok": result == "通过",
         "card_no": card_no,
         "name": emp["name"] if emp else None,
         "door": DOORS.get(door_id, door_id),
         "result": result,
         "time": now,
     }
+
+
+def build_month_stats(month):
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT a.card_no, a.punch_time, e.name, e.dept
+        FROM attendance_log a
+        LEFT JOIN employee e ON e.card_no = a.card_no
+        WHERE a.punch_time LIKE ? AND a.result = '通过'
+        ORDER BY a.punch_time
+    """, (month + "%",)).fetchall()
+    conn.close()
+
+    agg = {}
+    for r in rows:
+        day = r["punch_time"][:10]
+        tm = r["punch_time"][11:19]
+        item = agg.setdefault(r["card_no"], {
+            "card_no": r["card_no"],
+            "name": r["name"] or "未知",
+            "dept": r["dept"] or "-",
+            "days": set(),
+            "late": 0,
+        })
+        if day not in item["days"]:
+            item["days"].add(day)
+            if tm > WORK_START:
+                item["late"] += 1
+
+    stats = []
+    for it in agg.values():
+        stats.append({
+            "card_no": it["card_no"],
+            "name": it["name"],
+            "dept": it["dept"],
+            "days": len(it["days"]),
+            "late": it["late"],
+        })
+    stats.sort(key=lambda x: (-x["days"], x["card_no"]))
+    return stats
+
+
+@app.route("/report")
+def report():
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    stats = build_month_stats(month)
+    return render_template(
+        "report.html",
+        month=month,
+        stats=stats,
+        total_late=sum(s["late"] for s in stats),
+        work_start=WORK_START,
+    )
+
+
+@app.route("/report/export")
+def report_export():
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    stats = build_month_stats(month)
+
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["卡号", "姓名", "部门", "出勤天数", "迟到次数"])
+    for s in stats:
+        writer.writerow([s["card_no"], s["name"], s["dept"], s["days"], s["late"]])
+
+    data = "\ufeff" + buf.getvalue()  # BOM，保证 WPS/Excel 打开中文不乱码
+    return Response(
+        data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=attendance_{month}.csv"},
+    )
 
 
 @app.route("/api/stats")

@@ -25,3 +25,5 @@ button.danger { padding: 5px 10px; font-size: 13px; background: #b91c1c; border-
 .stat span { font-size: 13px; color: #64748b; }
 .ok { color: #0f766e; font-weight: 600; }
 .bad { color: #b91c1c; font-weight: 600; }
+.warn { color: #b45309; font-weight: 600; }
+.btnlink { display: inline-block; padding: 8px 14px; border: 1px solid #0f766e; background: #fff; color: #0f766e; border-radius: 6px; font-size: 14px; text-decoration: none; }

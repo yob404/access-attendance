@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}考勤月报{% endblock %}
+{% block content %}
+<h3>考勤月报</h3>
+
+<form class="inline" method="get" action="/report">
+  <input type="month" name="month" value="{{ month }}">
+  <button>查询</button>
+  <a class="btnlink" href="/report/export?month={{ month }}">导出 CSV</a>
+</form>
+
+<div class="stats">
+  <div class="stat"><b>{{ month }}</b><span>统计月份</span></div>
+  <div class="stat"><b>{{ stats|length }}</b><span>有出勤记录人数</span></div>
+  <div class="stat"><b>{{ total_late }}</b><span>迟到合计（次）</span></div>
+</div>
+
+<table>
+  <thead><tr><th>卡号</th><th>姓名</th><th>部门</th><th>出勤天数</th><th>迟到次数</th></tr></thead>
+  <tbody>
+    {% for s in stats %}
+    <tr>
+      <td>{{ s.card_no }}</td>
+      <td>{{ s.name }}</td>
+      <td>{{ s.dept }}</td>
+      <td>{{ s.days }}</td>
+      <td class="{{ 'warn' if s.late > 0 else '' }}">{{ s.late }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">该月没有打卡数据</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted">迟到判定：当天首次「通过」刷卡时间晚于 {{ work_start }} 记为迟到。</p>
+{% endblock %}

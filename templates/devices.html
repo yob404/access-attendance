@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}设备状态{% endblock %}
+{% block content %}
+<h3>门禁设备状态</h3>
+
+<div class="stats">
+  <div class="stat"><b>{{ total }}</b><span>设备总数</span></div>
+  <div class="stat"><b>{{ online }}</b><span>在线</span></div>
+  <div class="stat"><b>{{ total - online }}</b><span>离线</span></div>
+  <div class="stat"><b>{{ offline_sec }}s</b><span>判定阈值</span></div>
+</div>
+
+<table>
+  <thead><tr><th>设备编号</th><th>门禁点</th><th>IP</th><th>最后心跳</th><th>距今</th><th>状态</th></tr></thead>
+  <tbody>
+    {% for d in devices %}
+    <tr>
+      <td>{{ d.device_id }}</td>
+      <td>{{ d.door_id }}</td>
+      <td>{{ d.ip or '-' }}</td>
+      <td>{{ d.last_heartbeat }}</td>
+      <td>{{ d.age }} 秒前</td>
+      <td class="{{ 'ok' if d.online else 'bad' }}">{{ '在线' if d.online else '离线' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">还没有设备上报心跳，运行 scripts/heartbeat.py 试试</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted">规则：心跳间隔超过 {{ offline_sec }} 秒判离线。设备首次上报时自动注册。</p>
+{% endblock %}

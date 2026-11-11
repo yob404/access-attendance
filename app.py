@@ -7,9 +7,12 @@ from db import get_conn, init_db
 
 app = Flask(__name__)
 init_db()
+app.json.ensure_ascii = False
 
 DOORS = {"D01": "一号门（大厅）", "D02": "二号门（机房）"}
 WORK_START = "09:00"
+OFFLINE_SEC = 60
+TIME_FMT = "%Y-%m-%d %H:%M:%S"
 
 RESULT_OK = "通过"
 RESULT_UNKNOWN = "未知卡"
@@ -24,8 +27,8 @@ def index():
         ("员工 / 部门管理", "第 1 周", "已完成"),
         ("打卡记录", "第 2 周", "已完成"),
         ("考勤月报", "第 2 周", "已完成"),
-        ("门禁权限", "第 3 周", "进行中"),
-        ("设备在线状态", "第 3 周", "待开始"),
+        ("门禁权限", "第 3 周", "已完成"),
+        ("设备在线状态", "第 3 周", "进行中"),
         ("网络规划", "第 4 周", "待开始"),
     ]
     return render_template("index.html", modules=modules)
@@ -126,7 +129,6 @@ def permission_toggle(perm_id):
 
 
 def check_permission(conn, employee_id, door_id, now_time):
-    """按门禁点 + 时段判断是否放行。now_time 形如 HH:MM:SS"""
     rows = conn.execute(
         "SELECT * FROM door_permission WHERE employee_id = ? AND door_id = ? AND enabled = 1",
         (employee_id, door_id),
@@ -137,6 +139,68 @@ def check_permission(conn, employee_id, door_id, now_time):
         if r["start_time"] <= now_time <= r["end_time"]:
             return RESULT_OK
     return RESULT_OUT_TIME
+
+
+@app.route("/devices")
+def devices():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM device ORDER BY door_id").fetchall()
+    conn.close()
+
+    now = datetime.now()
+    items = []
+    for r in rows:
+        try:
+            last = datetime.strptime(r["last_heartbeat"], TIME_FMT)
+            age = int((now - last).total_seconds())
+        except Exception:
+            age = 999999
+        items.append({
+            "device_id": r["device_id"],
+            "door_id": r["door_id"],
+            "ip": r["ip"],
+            "last_heartbeat": r["last_heartbeat"],
+            "age": age,
+            "online": age <= OFFLINE_SEC,
+        })
+
+    online_cnt = sum(1 for i in items if i["online"])
+    return render_template(
+        "devices.html",
+        devices=items,
+        total=len(items),
+        online=online_cnt,
+        offline_sec=OFFLINE_SEC,
+    )
+
+
+@app.route("/api/heartbeat", methods=["POST"])
+def api_heartbeat():
+    """门禁设备心跳上报。设备首次上报时自动注册。"""
+    data = request.get_json(silent=True) or request.form
+    device_id = (data.get("device_id") or "").strip()
+    door_id = (data.get("door_id") or "D01").strip()
+    ip = (data.get("ip") or "").strip()
+    now = datetime.now().strftime(TIME_FMT)
+
+    if not device_id:
+        return {"ok": False, "msg": "device_id 不能为空"}, 400
+
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM device WHERE device_id = ?", (device_id,)).fetchone()
+    if row:
+        conn.execute(
+            "UPDATE device SET last_heartbeat = ?, ip = ?, door_id = ? WHERE device_id = ?",
+            (now, ip or row["ip"], door_id, device_id),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO device (device_id, door_id, ip, last_heartbeat) VALUES (?, ?, ?, ?)",
+            (device_id, door_id, ip, now),
+        )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "device_id": device_id, "time": now}
 
 
 @app.route("/attendance")
@@ -173,7 +237,7 @@ def api_punch():
     data = request.get_json(silent=True) or request.form
     card_no = (data.get("card_no") or "").strip()
     door_id = (data.get("door_id") or "D01").strip()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now().strftime(TIME_FMT)
     now_time = now[11:19]
 
     conn = get_conn()

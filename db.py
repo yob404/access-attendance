@@ -38,6 +38,15 @@ def init_db():
             enabled     INTEGER NOT NULL DEFAULT 1
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS device (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id      TEXT UNIQUE NOT NULL,
+            door_id        TEXT NOT NULL,
+            ip             TEXT,
+            last_heartbeat TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
-    print("[db] 员工表、打卡表、权限表已就绪")
+    print("[db] 四张表已就绪")

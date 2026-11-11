@@ -19,6 +19,15 @@ def init_db():
             status   TEXT NOT NULL DEFAULT '在职'
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            card_no    TEXT NOT NULL,
+            door_id    TEXT NOT NULL,
+            punch_time TEXT NOT NULL,
+            result     TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
-    print("[db] 员工表已就绪")
+    print("[db] 员工表、打卡表已就绪")

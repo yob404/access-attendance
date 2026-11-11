@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}打卡记录{% endblock %}
+{% block content %}
+<h3>打卡记录（{{ today }}）</h3>
+
+<div class="stats">
+  <div class="stat"><b>{{ total }}</b><span>今日刷卡次数</span></div>
+  <div class="stat"><b>{{ people }}</b><span>今日打卡人数</span></div>
+  <div class="stat"><b>{{ deny }}</b><span>异常（未知卡）</span></div>
+</div>
+
+<table>
+  <thead><tr><th>ID</th><th>姓名</th><th>卡号</th><th>门禁点</th><th>时间</th><th>结果</th></tr></thead>
+  <tbody>
+    {% for r in logs %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td>{{ r.name }}</td>
+      <td>{{ r.card_no }}</td>
+      <td>{{ r.door_id }}</td>
+      <td>{{ r.punch_time }}</td>
+      <td class="{{ 'ok' if r.result == '通过' else 'bad' }}">{{ r.result }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">还没有打卡记录，运行模拟脚本试试</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

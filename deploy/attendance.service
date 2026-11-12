@@ -1,0 +1,13 @@
+[Unit]
+Description=Access Attendance Flask App
+After=network.target
+
+[Service]
+User=yob
+WorkingDirectory=/home/yob/projects/access-attendance
+Environment="PATH=/home/yob/projects/access-attendance/.venv/bin"
+ExecStart=/home/yob/projects/access-attendance/.venv/bin/gunicorn -w 2 -b 0.0.0.0:8000 app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
